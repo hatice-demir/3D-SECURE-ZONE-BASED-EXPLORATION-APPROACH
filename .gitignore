@@ -1,0 +1,9 @@
+# Build files
+build/
+devel/
+
+# Logs
+*.log
+
+# Other temporary files
+*~
