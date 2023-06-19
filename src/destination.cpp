@@ -3,7 +3,7 @@
 #include <octomap_msgs/conversions.h>
 #include <octomap/octomap.h>
 #include <visualization_msgs/MarkerArray.h>
-#include <geometry_msgs/PointStamped.h>
+#include <geometry_msgs/PoseStamped.h>  // Modified header
 #include <pcl/kdtree/kdtree_flann.h>
 #include <pcl/segmentation/extract_clusters.h>
 #include <pcl/common/random.h>
@@ -15,10 +15,9 @@ using namespace octomap;
 // Function prototypes
 void octomapCallback(const octomap_msgs::Octomap::ConstPtr& msg);
 std::pair<std::vector<std::pair<pcl::PointCloud<pcl::PointXYZ>::Ptr, pcl::RGB>>, std::vector<geometry_msgs::Point>> clusterFrontiers(const std::vector<octomap::OcTree::iterator>& frontiers);
-geometry_msgs::Point selectGoalPoint(const std::vector<geometry_msgs::Point>& centers);
+geometry_msgs::PoseStamped selectGoalPoint(const std::vector<geometry_msgs::Point>& centers);  // Modified return type
 visualization_msgs::MarkerArray createVisualizationMarkers(const std::vector<std::pair<pcl::PointCloud<pcl::PointXYZ>::Ptr, pcl::RGB>>& clusters);
 bool isFrontierVoxel(octomap::OcTree::iterator& it, octomap::OcTree* octree);
-
 
 // publishers and subscribers
 ros::Publisher markerPub;
@@ -53,48 +52,83 @@ void octomapCallback(const octomap_msgs::Octomap::ConstPtr& msg) {
     // Publish the goal point to the navigation node
     // select the goal point from the cluster centers
     if (!cluster_centers.empty()) {
-        geometry_msgs::PointStamped goal_point;
-        goal_point.point = selectGoalPoint(cluster_centers);  // Function to implement selection criteria
-        goalPub.publish(goal_point);
+        geometry_msgs::PoseStamped goal_pose;  // Modified variable type
+        goal_pose = selectGoalPoint(cluster_centers);  // Function to implement selection criteria
+        goal_pose.header.frame_id = "odom";
+        goalPub.publish(goal_pose);
     }
     
     // Free the OcTree
     delete octree;
+/*
+    geometry_msgs::PoseStamped goal_pose;  // Modified variable type
+    //goal_pose = selectGoalPoint(cluster_centers);  // Function to implement selection criteria
+    geometry_msgs::PoseStamped pose_stamped;
+    // For simplicity, just returning the first point in the cluster. 
+    // Replace with your own logic for selecting goal point
+    pose_stamped.pose.position.x = 10;
+    pose_stamped.pose.position.y = 10;
+    pose_stamped.pose.position.z = 0;
+    // Set orientation to default (no rotation)
+    pose_stamped.pose.orientation.x = 0.0;
+    pose_stamped.pose.orientation.y = 0.0;
+    pose_stamped.pose.orientation.z = 0.0;
+    pose_stamped.pose.orientation.w = 1.0;
+    goal_pose.header.frame_id = "odom";
+    goalPub.publish(goal_pose);*/
+
 }
 
 bool isFrontierVoxel(octomap::OcTree::iterator& it, octomap::OcTree* octree) {
     int unknown_count = 0;
     int known_count = 0;
+    int z_occupied_count = 0;
 
     if(octree->isNodeOccupied(*it)) {
         return false;
     }
 
-    // Count the number of unknown and known neighbors
-    for (octomap::OcTree::leaf_bbx_iterator neighbor = octree->begin_leafs_bbx(it.getCoordinate() - octomap::point3d(1,1,1), 
-                                                                                it.getCoordinate() + octomap::point3d(1,1,1)); 
+    // Count the number of unknown, known, and z-occupied neighbors
+    for (octomap::OcTree::leaf_bbx_iterator neighbor = octree->begin_leafs_bbx(it.getCoordinate() - octomap::point3d(0.5,0.5,0.5), 
+                                                                                it.getCoordinate() + octomap::point3d(0.5,0.5,0.5)); 
          neighbor != octree->end_leafs_bbx(); ++neighbor) {
         if (octree->isNodeOccupied(*neighbor)) {
             known_count++;
+            if (neighbor.getCoordinate().z() != it.getCoordinate().z()) {
+                z_occupied_count++;
+            }
         } else {
             unknown_count++;
         }
     }
     double unknown_ratio = static_cast<double>(unknown_count) / (known_count + unknown_count);
+
+    // Check the occupancy count along the z-axis
+    double z_occupied_ratio = static_cast<double>(z_occupied_count) / (known_count + unknown_count);
+
     // A voxel is considered a frontier if it has at least one known neighbor (it is adjacent to known space)
     // and the number of unknown neighbors is greater than a certain threshold (it is adjacent to unknown space)
-    // The exact threshold depends on your specific application and may need to be tuned
-    if (known_count > 0 && unknown_ratio > 0.5) {
+    // and the number of occupied neighbors along the z-axis is less than a certain threshold (it is not a vertical obstacle)
+    // The exact thresholds depend on your specific application and may need to be tuned
+    if (known_count > 0 && unknown_ratio > 0.5 && z_occupied_ratio < 0.2) {
         return true;
     } else {
         return false;
     }
 }
 
-geometry_msgs::Point selectGoalPoint(const std::vector<geometry_msgs::Point>& centers) {
+geometry_msgs::PoseStamped selectGoalPoint(const std::vector<geometry_msgs::Point>& centers) {
+    geometry_msgs::PoseStamped pose_stamped;
     // For simplicity, just returning the first point in the cluster. 
     // Replace with your own logic for selecting goal point
-    return centers.front();
+    pose_stamped.pose.position = centers.front();
+    // Set orientation to default (no rotation)
+    pose_stamped.pose.orientation.x = 0.0;
+    pose_stamped.pose.orientation.y = 0.0;
+    pose_stamped.pose.orientation.z = 0.0;
+    pose_stamped.pose.orientation.w = 1.0;
+
+    return pose_stamped;
 }
 
 std::pair<std::vector<std::pair<pcl::PointCloud<pcl::PointXYZ>::Ptr, pcl::RGB>>, std::vector<geometry_msgs::Point>> clusterFrontiers(const std::vector<octomap::OcTree::iterator>& frontiers) {
@@ -205,15 +239,13 @@ visualization_msgs::MarkerArray createVisualizationMarkers(const std::vector<std
     return markers;
 }
 
-
-
 int main(int argc, char** argv) {
     ros::init(argc, argv, "octomap_subscriber");
     ros::NodeHandle nh;
     std::string topic_name = "/octomap_full";
     ros::Subscriber sub = nh.subscribe<octomap_msgs::Octomap>(topic_name, 1, octomapCallback);
     markerPub = nh.advertise<visualization_msgs::MarkerArray>("clusters", 1);
-    goalPub = nh.advertise<geometry_msgs::PointStamped>("move_base_simple/goal", 1);
+    goalPub = nh.advertise<geometry_msgs::PoseStamped>("move_base_simple/goal", 1);  // Modified publisher type
     ros::spin();
 
     return 0;

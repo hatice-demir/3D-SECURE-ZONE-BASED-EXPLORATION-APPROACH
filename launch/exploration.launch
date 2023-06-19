@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<launch>
+
+  <include file="$(find husky)/launch/husky_exp5_world.launch" />
+
+  <!-- Run the map server -->
+  <arg name="map_file" default="$(find husky)/maps/playpen_map.yaml"/>
+
+  <!--- Run Move Base -->
+  <include file="$(find husky)/launch/move_base.launch" />
+
+  <include file="$(find husky)/launch/octomap_mapping_velodyne.launch" />
+
+  <!-- <include file="$(find husky)/launch/gmapping.launch" /> -->
+
+  
+
+  <!-- <node pkg="bitirme" type="destination" name="destination" /> -->
+
+</launch>

@@ -10,6 +10,7 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   rospy
   std_msgs
+  costmap_2d
 )
 
 catkin_package(
@@ -30,3 +31,17 @@ target_link_libraries(listenMap ${catkin_LIBRARIES} ${OCTOMAP_LIBRARIES})
 add_executable(destination src/destination.cpp)
 target_link_libraries(destination ${catkin_LIBRARIES} ${OCTOMAP_LIBRARIES})
 
+add_executable(mapConvertion src/mapConvertion.cpp)
+target_link_libraries(mapConvertion ${catkin_LIBRARIES} ${OCTOMAP_LIBRARIES})
+
+add_executable(costmapGenerator src/costmapGenerator.cpp)
+target_link_libraries(costmapGenerator ${catkin_LIBRARIES} ${OCTOMAP_LIBRARIES})
+
+
+catkin_install_python(PROGRAMS scripts/mapConvertion.py
+  DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
+
+catkin_install_python(PROGRAMS scripts/costmapGeneration.py
+  DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)

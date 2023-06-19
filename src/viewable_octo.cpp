@@ -1,4 +1,3 @@
-
 #include <ros/ros.h>
 #include <octomap_msgs/Octomap.h>
 #include <octomap_msgs/OctomapStamped.h>
